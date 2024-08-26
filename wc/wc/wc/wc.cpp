@@ -17,7 +17,7 @@ namespace vars {
     std::atomic<bool> running{ true };
     std::vector<int> delays;
     std::atomic<bool> paused{ false }; // variable to track pause state
-    bool previousMouse4State{ false }; // to detect Mouse4 button press
+    bool previousMouse4State{ false }; // to detect m4 
 }
 
 namespace math {
@@ -58,7 +58,7 @@ namespace nt {
         }
     }
 }
-
+// defeat delays
 void generate_delays(int cps) {
     vars::delays.clear();
     double base_delay = 1000.0 / cps;
@@ -72,7 +72,7 @@ void generate_delays(int cps) {
             double delay = (std::max)(1.0, base_delay + variation);
             temp_delays.push_back(delay);
         }
-    } while (math::get_variance(temp_delays) < 1); // reduced variance threshold
+    } while (math::get_variance(temp_delays) < 1); // reduced variance 
 
     // normalize delays to ensure average CPS is correct
     double total_delay = std::accumulate(temp_delays.begin(), temp_delays.end(), 0.0);
@@ -144,7 +144,7 @@ int main() {
     while (running) {
         auto currentTime = std::chrono::steady_clock::now();
 
-        // check for pause/unpause key (Mouse4)
+        // check for pause/unpause key (m4)
         bool currentMouse4State = (GetAsyncKeyState(VK_XBUTTON1) & 0x8000) != 0;
         if (currentMouse4State && !previousMouse4State) {
             paused = !paused;
