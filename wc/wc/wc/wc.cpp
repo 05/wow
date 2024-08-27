@@ -6,8 +6,12 @@
 #include <vector>
 #include <algorithm>
 #include <numeric>
-#include <cmath>
 #include <chrono>
+#include <shellapi.h>
+#include <functional>
+#define IDD_DIALOG_CPS 101
+#define IDC_EDIT_CPS 1001
+#define IDI_TRAYICON 102  // Add this line
 
 #pragma comment(lib, "winmm.lib")
 
@@ -16,8 +20,10 @@ namespace vars {
     HWND minecraft_window{};
     std::atomic<bool> running{ true };
     std::vector<int> delays;
-    std::atomic<bool> paused{ false }; // variable to track pause state
-    bool previousMouse4State{ false }; // to detect m4 
+    NOTIFYICONDATA nid = {};
+    HMENU hMenu = nullptr;
+    std::vector<int> right_click_delays;
+    std::atomic<bool> paused{ false };
 }
 
 namespace math {
@@ -25,13 +31,6 @@ namespace math {
         static thread_local std::mt19937 generator(std::random_device{}());
         std::uniform_int_distribution<int> distribution(min, max);
         return distribution(generator);
-    }
-
-    double get_variance(const std::vector<double>& data) {
-        double mean = std::accumulate(data.begin(), data.end(), 0.0) / data.size();
-        double sq_sum = std::inner_product(data.begin(), data.end(), data.begin(), 0.0,
-            std::plus<>(), [mean](double a, double b) { return std::pow(a - mean, 2); });
-        return sq_sum / data.size();
     }
 }
 
@@ -58,30 +57,16 @@ namespace nt {
         }
     }
 }
-// defeat delays
+
 void generate_delays(int cps) {
     vars::delays.clear();
     double base_delay = 1000.0 / cps;
-    double variation_range = base_delay * 0.1; // 10% variation
+    double variation_range = base_delay * 0.1;
 
-    std::vector<double> temp_delays;
-    do {
-        temp_delays.clear();
-        for (int x = 0; x < 5000; x++) {
-            double variation = math::get_random_int(-100, 100) * variation_range / 100.0;
-            double delay = (std::max)(1.0, base_delay + variation);
-            temp_delays.push_back(delay);
-        }
-    } while (math::get_variance(temp_delays) < 1); // reduced variance 
-
-    // normalize delays to ensure average CPS is correct
-    double total_delay = std::accumulate(temp_delays.begin(), temp_delays.end(), 0.0);
-    double actual_cps = 5000.0 / (total_delay / 1000.0);
-    double scale_factor = static_cast<double>(cps) / actual_cps;
-
-    for (const auto& delay : temp_delays) {
-        int adjusted_delay = static_cast<int>(std::round(delay * scale_factor));
-        vars::delays.push_back((std::max)(1, adjusted_delay)); // Ensure minimum 1ms delay
+    for (int x = 0; x < 5000; x++) {
+        double variation = math::get_random_int(-100, 100) * variation_range / 100.0;
+        int delay = (std::max)(1, static_cast<int>(std::round(base_delay + variation)));
+        vars::delays.push_back(delay);
     }
 }
 
@@ -90,69 +75,220 @@ void rotate_delays() {
 }
 
 void LeftMouseClick() {
-    PostMessageA(vars::minecraft_window, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(0, 0));
-    PostMessageA(vars::minecraft_window, WM_LBUTTONUP, MK_LBUTTON, MAKELPARAM(0, 0));
-
+    PostMessageA(vars::minecraft_window, WM_LBUTTONDOWN, MK_LBUTTON, 0);
+    PostMessageA(vars::minecraft_window, WM_LBUTTONUP, MK_LBUTTON, 0);
     nt::Sleep(static_cast<LONGLONG>(vars::delays.front()));
     rotate_delays();
 }
 
-void Mouse5Click() {
-    // press 2 key
-    keybd_event('2', 0, 0, 0);
-    nt::Sleep(20);
-    keybd_event('2', 0, KEYEVENTF_KEYUP, 0);
-    nt::Sleep(10);
+void generate_right_click_delays(int cps) {
+    vars::right_click_delays.clear();
+    double base_delay = 1000.0 / (cps * 0.7);  // 70% of the left-click speed (30% slower)
+    double variation_range = base_delay * 0.1;
 
-    // right click
-    PostMessageA(vars::minecraft_window, WM_RBUTTONDOWN, MK_RBUTTON, MAKELPARAM(0, 0));
-    nt::Sleep(10);
-    PostMessageA(vars::minecraft_window, WM_RBUTTONUP, MK_RBUTTON, MAKELPARAM(0, 0));
-    nt::Sleep(20);
-
-    // press 1 key
-    keybd_event('1', 0, 0, 0);
-    nt::Sleep(20);
-    keybd_event('1', 0, KEYEVENTF_KEYUP, 0);
-    nt::Sleep(20);
+    for (int x = 0; x < 5000; x++) {
+        double variation = math::get_random_int(-100, 100) * variation_range / 100.0;
+        int delay = (std::max)(1, static_cast<int>(std::round(base_delay + variation)));
+        vars::right_click_delays.push_back(delay);
+    }
 }
 
-int main() {
-    using namespace vars;
+void rotate_right_click_delays() {
+    std::rotate(vars::right_click_delays.begin(), vars::right_click_delays.begin() + 1, vars::right_click_delays.end());
+}
 
-    std::cout << "   wc -- by big y\n";
+void RightMouseClick() {
+    PostMessageA(vars::minecraft_window, WM_RBUTTONDOWN, MK_RBUTTON, 0);
+    PostMessageA(vars::minecraft_window, WM_RBUTTONUP, MK_RBUTTON, 0);
+    nt::Sleep(static_cast<LONGLONG>(vars::right_click_delays.front()));
+    rotate_right_click_delays();
+}
+
+void Mouse5Click() {
+    keybd_event('2', 0, 0, 0);
+    nt::Sleep(15);
+    keybd_event('2', 0, KEYEVENTF_KEYUP, 0);
+    nt::Sleep(7);
+    PostMessageA(vars::minecraft_window, WM_RBUTTONDOWN, MK_RBUTTON, 0);
+    nt::Sleep(7);
+    PostMessageA(vars::minecraft_window, WM_RBUTTONUP, MK_RBUTTON, 0);
+    nt::Sleep(15);
+    keybd_event('1', 0, 0, 0);
+    nt::Sleep(15);
+    keybd_event('1', 0, KEYEVENTF_KEYUP, 0);
+    nt::Sleep(15);
+}
+
+void RemoveSystemTrayIcon() {
+    Shell_NotifyIcon(NIM_DELETE, &vars::nid);
+}
+
+void CreateSystemTrayIcon(HWND hwnd) {
+    vars::nid.cbSize = sizeof(NOTIFYICONDATA);
+    vars::nid.hWnd = hwnd;
+    vars::nid.uID = 1;
+    vars::nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
+    vars::nid.uCallbackMessage = WM_USER + 1;
+    
+    // Load the custom icon
+    HICON hIcon = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(IDI_TRAYICON));
+    if (hIcon) {
+        vars::nid.hIcon = hIcon;
+    } else {
+        // Fallback to default application icon if custom icon fails to load
+        vars::nid.hIcon = LoadIcon(NULL, IDI_APPLICATION);
+    }
+    
+    wcscpy_s(vars::nid.szTip, L"WC Autoclicker");
+    Shell_NotifyIcon(NIM_ADD, &vars::nid);
+}
+
+LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    switch (uMsg) {
+    case WM_USER + 1:
+        // Handle system tray messages here
+        if (lParam == WM_RBUTTONUP) {
+            POINT pt;
+            GetCursorPos(&pt);
+            SetForegroundWindow(hwnd);
+            UINT clicked = TrackPopupMenu(vars::hMenu, TPM_RETURNCMD | TPM_NONOTIFY, pt.x, pt.y, 0, hwnd, NULL);
+            if (clicked == 1) {
+                vars::running = false;
+                PostQuitMessage(0);
+            }
+        }
+        break;
+    case WM_DESTROY:
+        PostQuitMessage(0);
+        return 0;
+    }
+    return DefWindowProc(hwnd, uMsg, wParam, lParam);
+}
+
+INT_PTR CALLBACK DialogProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    static HBRUSH hBrushBackground = CreateSolidBrush(RGB(0, 0, 0));
+
+    switch (uMsg)
+    {
+    case WM_INITDIALOG:
+        {
+            // Set the background color to black for the dialog
+            SetClassLongPtr(hwndDlg, GCLP_HBRBACKGROUND, (LONG_PTR)hBrushBackground);
+            
+            // Set the text color to white for all child controls
+            EnumChildWindows(hwndDlg, [](HWND hwnd, LPARAM lParam) -> BOOL {
+                SetWindowLongPtr(hwnd, GWL_STYLE, GetWindowLongPtr(hwnd, GWL_STYLE) | WS_CHILD);
+                return TRUE;
+            }, 0);
+
+            return TRUE;
+        }
+
+    case WM_CTLCOLORDLG:
+    case WM_CTLCOLORSTATIC:
+    case WM_CTLCOLOREDIT:
+    case WM_CTLCOLORBTN:
+        {
+            HDC hdcStatic = (HDC)wParam;
+            SetTextColor(hdcStatic, RGB(255, 255, 255));  // white text
+            SetBkColor(hdcStatic, RGB(0, 0, 0));  // gray background
+            return (INT_PTR)hBrushBackground;
+        }
+
+    case WM_COMMAND:
+        switch (LOWORD(wParam))
+        {
+        case IDOK:
+            // Get the CPS value from the edit control
+            vars::cps = GetDlgItemInt(hwndDlg, IDC_EDIT_CPS, NULL, FALSE);
+            EndDialog(hwndDlg, IDOK);
+            return TRUE;
+
+        case IDCANCEL:
+            EndDialog(hwndDlg, IDCANCEL);
+            return TRUE;
+        }
+        break;
+
+    case WM_DESTROY:
+        DeleteObject(hBrushBackground);
+        return TRUE;
+    }
+    return FALSE;
+}
+
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+    std::cout << "wc -- by big y\n\n";
     std::cout << "--------------------\n" << "CPS CONVERSION CHART\n";
-    std::cout << "   20 = 12-14 cps\n   30 = 17-19 cps\n   40 = 21-23 cps\n   50 = 22-24 cps\n--------------------\n\n";
+    std::cout << "   20 = 12-14 cps\n   30 = 17-19 cps\n   40 = 21-23 cps\n   50 = 22-24 cps\n" << "--------------------\n\n";
 
-    std::cout << "enter your desired cps: ";
-    std::cin >> cps;
+    INT_PTR result = DialogBox(hInstance, MAKEINTRESOURCE(IDD_DIALOG_CPS), NULL, DialogProc);
+    if (result == -1) {
+        DWORD error = GetLastError();
+        char errorMsg[256];
+        sprintf_s(errorMsg, "Failed to create dialog. Error code: %d", error);
+        MessageBoxA(NULL, errorMsg, "Error", MB_ICONERROR);
+        return -1;
+    }
+    else if (result != IDOK) {
+        MessageBoxA(NULL, "Dialog cancelled. Exiting application.", "Information", MB_ICONINFORMATION);
+        return 0;
+    }
 
-    minecraft_window = FindWindowA("LWJGL", nullptr);
-    if (!minecraft_window) {
+    vars::minecraft_window = FindWindowA("LWJGL", nullptr);
+    if (!vars::minecraft_window) {
         std::cerr << "minecraft window not found!\n";
         return -1;
     }
-
-    generate_delays(cps);
+    
+    generate_delays(vars::cps);
     Mouse5Click();
 
-    std::cout << "autoclicker started. press 'f1' to exit, 'mouse4' to pause/unpause.\n";
+    std::cout << "autoclicker started. press 'F1' to exit.\n";
 
     auto lastMouse5Click = std::chrono::steady_clock::now();
     const auto mouse5Cooldown = std::chrono::milliseconds(3000);
+    auto lastToggleClick = std::chrono::steady_clock::now();
+    const auto toggleCooldown = std::chrono::milliseconds(200);  // Prevent rapid toggling
 
-    while (running) {
+    // Create a hidden window to handle system tray messages
+    WNDCLASS wc = {};
+    wc.lpfnWndProc = WindowProc;
+    wc.hInstance = GetModuleHandle(nullptr);
+    wc.lpszClassName = L"WCAutoclickerClass";
+    RegisterClass(&wc);
+
+    HWND hwnd = CreateWindowEx(0, L"WCAutoclickerClass", L"WC Autoclicker",
+        WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT,
+        CW_USEDEFAULT, CW_USEDEFAULT, nullptr, nullptr,
+        GetModuleHandle(nullptr), nullptr);
+
+    CreateSystemTrayIcon(hwnd);
+    
+    // Create system tray menu
+    vars::hMenu = CreatePopupMenu();
+    AppendMenu(vars::hMenu, MF_STRING, 1, L"Exit");
+
+    MSG msg;
+    while (vars::running) {
+        while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        }
+
         auto currentTime = std::chrono::steady_clock::now();
 
-        // check for pause/unpause key (m4)
-        bool currentMouse4State = (GetAsyncKeyState(VK_XBUTTON1) & 0x8000) != 0;
-        if (currentMouse4State && !previousMouse4State) {
-            paused = !paused;
+        // Toggle pause with Mouse4
+        if ((GetAsyncKeyState(VK_XBUTTON1) & 0x8000) &&
+            (currentTime - lastToggleClick > toggleCooldown)) {
+            vars::paused = !vars::paused;
+            lastToggleClick = currentTime;
+            // Optional: Add some feedback (e.g., console output or system tray notification)
+            std::cout << (vars::paused ? "Autoclicker paused" : "Autoclicker resumed") << std::endl;
         }
-        previousMouse4State = currentMouse4State;
 
-        // only perform clicks if not paused
-        if (!paused) {
+        if (!vars::paused) {
             if (GetAsyncKeyState(VK_LBUTTON) & 0x8000) {
                 LeftMouseClick();
             }
@@ -165,12 +301,11 @@ int main() {
         }
 
         if (GetAsyncKeyState(VK_F1) & 0x8000) {
-            running = false;
+            vars::running = false;
         }
 
-        nt::Sleep(1LL);
+        nt::Sleep(1);
     }
-
-    std::cout << "wc stopped.\n";
+    RemoveSystemTrayIcon();
     return 0;
 }

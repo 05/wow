@@ -1,0 +1,2 @@
+﻿MSVCRT.lib(exe_main.obj) : error LNK2001: unresolved external symbol main
+C:\Users\yawni\OneDrive\Desktop\wc\wc\x64\Release\wc.exe : fatal error LNK1120: 1 unresolved externals
