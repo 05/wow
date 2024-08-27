@@ -22,4 +22,4 @@ BEGIN
     DEFPUSHBUTTON   "start",IDOK,90,85,40,15
 END
 
-IDI_TRAYICON ICON "C:\Users\yawni\OneDrive\Desktop\wc\wc\wc\h4.ico"
+IDI_TRAYICON ICON "h4.ico"
