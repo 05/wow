@@ -111,11 +111,11 @@ void mouse5_click() {
     keybd_event('2', 0, KEYEVENTF_KEYUP, 0);
     nt::sleep(5);
     PostMessageA(minecraft_window, WM_RBUTTONDOWN, MK_RBUTTON, 0);
-    nt::sleep(1);
+    nt::sleep(3);
     PostMessageA(minecraft_window, WM_RBUTTONUP, MK_RBUTTON, 0);
-    nt::sleep(20);  // Increased delay after right-click
+    nt::sleep(35);  // Increased delay after right-click
     keybd_event('1', 0, 0, 0);
-    nt::sleep(10);
+    nt::sleep(20);
     keybd_event('1', 0, KEYEVENTF_KEYUP, 0);
     nt::sleep(5);
 }
