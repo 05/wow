@@ -1,0 +1,4 @@
+#include <windows.h>
+#define IDI_TRAYICON 102
+
+IDI_TRAYICON ICON "h4.ico"
